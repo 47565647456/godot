@@ -13,6 +13,7 @@ jobs:
     name: 📊 Static checks
     uses: ./.github/workflows/static_checks_self_hosted.yml
     
+    
 
   # Second stage: Run all the builds and some of the tests. 
 

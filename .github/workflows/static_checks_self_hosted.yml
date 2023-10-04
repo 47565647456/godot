@@ -22,8 +22,8 @@ jobs:
 
       - name: Install clang-format
         run: |
-          deb http://apt.llvm.org/focal/ llvm-toolchain-focal-15 main
-          deb-src http://apt.llvm.org/focal/ llvm-toolchain-focal-15 main
+          echo "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-15 main" | sudo tee -a /etc/apt/sources.list
+          echo "deb-src http://apt.llvm.org/focal/ llvm-toolchain-focal-15 main" | sudo tee -a /etc/apt/sources.list
           sudo apt update
           sudo apt install -y clang-format
         

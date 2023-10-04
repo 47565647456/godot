@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  subviewport_container.h                                               */
+/*  openxr_eye_gaze_interaction.h                                         */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -28,49 +28,31 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#ifndef SUBVIEWPORT_CONTAINER_H
-#define SUBVIEWPORT_CONTAINER_H
+#ifndef OPENXR_EYE_GAZE_INTERACTION_H
+#define OPENXR_EYE_GAZE_INTERACTION_H
 
-#include "scene/gui/container.h"
+#include "openxr_extension_wrapper.h"
 
-class SubViewportContainer : public Container {
-	GDCLASS(SubViewportContainer, Container);
-
-	bool stretch = false;
-	int shrink = 1;
-	void _notify_viewports(int p_notification);
-	bool _is_propagated_in_gui_input(const Ref<InputEvent> &p_event);
-	void _send_event_to_viewports(const Ref<InputEvent> &p_event);
-	void _propagate_nonpositional_event(const Ref<InputEvent> &p_event);
-
-protected:
-	void _notification(int p_what);
-	static void _bind_methods();
-
-	virtual void add_child_notify(Node *p_child) override;
-	virtual void remove_child_notify(Node *p_child) override;
-
-	GDVIRTUAL1RC(bool, _propagate_input_event, Ref<InputEvent>);
-
+class OpenXREyeGazeInteractionExtension : public OpenXRExtensionWrapper {
 public:
-	void set_stretch(bool p_enable);
-	bool is_stretch_enabled() const;
+	static OpenXREyeGazeInteractionExtension *get_singleton();
 
-	virtual void input(const Ref<InputEvent> &p_event) override;
-	virtual void unhandled_input(const Ref<InputEvent> &p_event) override;
-	virtual void gui_input(const Ref<InputEvent> &p_event) override;
-	void set_stretch_shrink(int p_shrink);
-	int get_stretch_shrink() const;
-	void recalc_force_viewport_sizes();
+	OpenXREyeGazeInteractionExtension();
+	~OpenXREyeGazeInteractionExtension();
 
-	virtual Size2 get_minimum_size() const override;
+	virtual HashMap<String, bool *> get_requested_extensions() override;
+	virtual void *set_system_properties_and_get_next_pointer(void *p_next_pointer) override;
 
-	virtual Vector<int> get_allowed_size_flags_horizontal() const override;
-	virtual Vector<int> get_allowed_size_flags_vertical() const override;
+	bool is_available();
+	bool supports_eye_gaze_interaction();
 
-	PackedStringArray get_configuration_warnings() const override;
+	virtual void on_register_metadata() override;
 
-	SubViewportContainer();
+private:
+	static OpenXREyeGazeInteractionExtension *singleton;
+
+	bool available = false;
+	XrSystemEyeGazeInteractionPropertiesEXT properties;
 };
 
-#endif // SUBVIEWPORT_CONTAINER_H
+#endif // OPENXR_EYE_GAZE_INTERACTION_H

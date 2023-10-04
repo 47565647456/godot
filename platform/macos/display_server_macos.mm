@@ -749,6 +749,7 @@ void DisplayServerMacOS::window_destroy(WindowID p_window) {
 	}
 #endif
 	windows.erase(p_window);
+	update_presentation_mode();
 }
 
 void DisplayServerMacOS::window_resize(WindowID p_window, int p_width, int p_height) {
@@ -1887,6 +1888,8 @@ Error DisplayServerMacOS::file_dialog_show(const String &p_title, const String &
 		}
 	}
 
+	WindowID prev_focus = last_focused_window;
+
 	Callable callback = p_callback; // Make a copy for async completion handler.
 	switch (p_mode) {
 		case FILE_DIALOG_MODE_SAVE_FILE: {
@@ -1953,6 +1956,9 @@ Error DisplayServerMacOS::file_dialog_show(const String &p_title, const String &
 									  Callable::CallError ce;
 									  callback.callp((const Variant **)&v_args, 2, ret, ce);
 								  }
+							  }
+							  if (prev_focus != INVALID_WINDOW_ID) {
+								  callable_mp(DisplayServer::get_singleton(), &DisplayServer::window_move_to_foreground).call_deferred(prev_focus);
 							  }
 						  }];
 		} break;
@@ -2032,6 +2038,9 @@ Error DisplayServerMacOS::file_dialog_show(const String &p_title, const String &
 									  Callable::CallError ce;
 									  callback.callp((const Variant **)&v_args, 2, ret, ce);
 								  }
+							  }
+							  if (prev_focus != INVALID_WINDOW_ID) {
+								  callable_mp(DisplayServer::get_singleton(), &DisplayServer::window_move_to_foreground).call_deferred(prev_focus);
 							  }
 						  }];
 		} break;
@@ -2626,6 +2635,47 @@ void DisplayServerMacOS::window_set_title(const String &p_title, WindowID p_wind
 	[wd.window_object setTitle:[NSString stringWithUTF8String:p_title.utf8().get_data()]];
 }
 
+Size2i DisplayServerMacOS::window_get_title_size(const String &p_title, WindowID p_window) const {
+	_THREAD_SAFE_METHOD_
+
+	Size2i size;
+	ERR_FAIL_COND_V(!windows.has(p_window), size);
+
+	const WindowData &wd = windows[p_window];
+	if (wd.fullscreen || wd.borderless) {
+		return size;
+	}
+	if ([wd.window_object respondsToSelector:@selector(isMiniaturized)]) {
+		if ([wd.window_object isMiniaturized]) {
+			return size;
+		}
+	}
+
+	float scale = screen_get_max_scale();
+
+	if (wd.window_button_view) {
+		size.x = ([wd.window_button_view getOffset].x + [wd.window_button_view frame].size.width);
+		size.y = ([wd.window_button_view getOffset].y + [wd.window_button_view frame].size.height);
+	} else {
+		NSButton *cb = [wd.window_object standardWindowButton:NSWindowCloseButton];
+		NSButton *mb = [wd.window_object standardWindowButton:NSWindowMiniaturizeButton];
+		float cb_frame = NSMinX([cb frame]);
+		float mb_frame = NSMinX([mb frame]);
+		bool is_rtl = ([wd.window_object windowTitlebarLayoutDirection] == NSUserInterfaceLayoutDirectionRightToLeft);
+
+		float window_buttons_spacing = (is_rtl) ? (cb_frame - mb_frame) : (mb_frame - cb_frame);
+		size.x = window_buttons_spacing * 4;
+		size.y = [cb frame].origin.y + [cb frame].size.height;
+	}
+
+	NSDictionary *attributes = [NSDictionary dictionaryWithObjectsAndKeys:[NSFont titleBarFontOfSize:0], NSFontAttributeName, nil];
+	NSSize text_size = [[[NSAttributedString alloc] initWithString:[NSString stringWithUTF8String:p_title.utf8().get_data()] attributes:attributes] size];
+	size.x += text_size.width;
+	size.y = MAX(size.y, text_size.height);
+
+	return size * scale;
+}
+
 void DisplayServerMacOS::window_set_mouse_passthrough(const Vector<Vector2> &p_region, WindowID p_window) {
 	_THREAD_SAFE_METHOD_
 
@@ -2868,6 +2918,15 @@ Size2i DisplayServerMacOS::window_get_max_size(WindowID p_window) const {
 	return wd.max_size;
 }
 
+void DisplayServerMacOS::update_presentation_mode() {
+	for (const KeyValue<WindowID, WindowData> &wd : windows) {
+		if (wd.value.fullscreen && wd.value.exclusive_fullscreen) {
+			return;
+		}
+	}
+	[NSApp setPresentationOptions:NSApplicationPresentationDefault];
+}
+
 void DisplayServerMacOS::window_set_min_size(const Size2i p_size, WindowID p_window) {
 	_THREAD_SAFE_METHOD_
 
@@ -2978,7 +3037,7 @@ void DisplayServerMacOS::window_set_mode(WindowMode p_mode, WindowID p_window) {
 			[wd.window_object toggleFullScreen:nil];
 
 			if (old_mode == WINDOW_MODE_EXCLUSIVE_FULLSCREEN) {
-				[NSApp setPresentationOptions:NSApplicationPresentationDefault];
+				update_presentation_mode();
 			}
 
 			wd.fullscreen = false;
@@ -3176,7 +3235,9 @@ void DisplayServerMacOS::window_set_flag(WindowFlags p_flag, bool p_enabled, Win
 		} break;
 		case WINDOW_FLAG_BORDERLESS: {
 			// OrderOut prevents a lose focus bug with the window.
+			bool was_visible = false;
 			if ([wd.window_object isVisible]) {
+				was_visible = true;
 				[wd.window_object orderOut:nil];
 			}
 			wd.borderless = p_enabled;
@@ -3191,7 +3252,7 @@ void DisplayServerMacOS::window_set_flag(WindowFlags p_flag, bool p_enabled, Win
 				[wd.window_object setFrame:frameRect display:NO];
 			}
 			_update_window_style(wd);
-			if ([wd.window_object isVisible]) {
+			if (was_visible || [wd.window_object isVisible]) {
 				if ([wd.window_object isMiniaturized]) {
 					return;
 				} else if (wd.no_focus) {

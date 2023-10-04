@@ -240,6 +240,8 @@ Error DisplayServerWindows::file_dialog_show(const String &p_title, const String
 		filters.push_back({ (LPCWSTR)filter_names[i].ptr(), (LPCWSTR)filter_exts[i].ptr() });
 	}
 
+	WindowID prev_focus = last_focused_window;
+
 	HRESULT hr = S_OK;
 	IFileDialog *pfd = nullptr;
 	if (p_mode == FILE_DIALOG_MODE_SAVE_FILE) {
@@ -340,6 +342,9 @@ Error DisplayServerWindows::file_dialog_show(const String &p_title, const String
 			}
 		}
 		pfd->Release();
+		if (prev_focus != INVALID_WINDOW_ID) {
+			callable_mp(DisplayServer::get_singleton(), &DisplayServer::window_move_to_foreground).call_deferred(prev_focus);
+		}
 
 		return OK;
 	} else {
@@ -1189,6 +1194,51 @@ void DisplayServerWindows::window_set_title(const String &p_title, WindowID p_wi
 
 	ERR_FAIL_COND(!windows.has(p_window));
 	SetWindowTextW(windows[p_window].hWnd, (LPCWSTR)(p_title.utf16().get_data()));
+}
+
+Size2i DisplayServerWindows::window_get_title_size(const String &p_title, WindowID p_window) const {
+	_THREAD_SAFE_METHOD_
+
+	Size2i size;
+	ERR_FAIL_COND_V(!windows.has(p_window), size);
+
+	const WindowData &wd = windows[p_window];
+	if (wd.fullscreen || wd.minimized || wd.borderless) {
+		return size;
+	}
+
+	HDC hdc = GetDCEx(wd.hWnd, NULL, DCX_WINDOW);
+	if (hdc) {
+		Char16String s = p_title.utf16();
+		SIZE text_size;
+		if (GetTextExtentPoint32W(hdc, (LPCWSTR)(s.get_data()), s.length(), &text_size)) {
+			size.x = text_size.cx;
+			size.y = text_size.cy;
+		}
+
+		ReleaseDC(wd.hWnd, hdc);
+	}
+	RECT rect;
+	if (DwmGetWindowAttribute(wd.hWnd, DWMWA_CAPTION_BUTTON_BOUNDS, &rect, sizeof(RECT)) == S_OK) {
+		if (rect.right - rect.left > 0) {
+			ClientToScreen(wd.hWnd, (POINT *)&rect.left);
+			ClientToScreen(wd.hWnd, (POINT *)&rect.right);
+
+			if (win81p_PhysicalToLogicalPointForPerMonitorDPI) {
+				win81p_PhysicalToLogicalPointForPerMonitorDPI(0, (POINT *)&rect.left);
+				win81p_PhysicalToLogicalPointForPerMonitorDPI(0, (POINT *)&rect.right);
+			}
+
+			size.x += (rect.right - rect.left);
+			size.y = MAX(size.y, rect.bottom - rect.top);
+		}
+	}
+	if (icon.is_valid()) {
+		size.x += 32;
+	} else {
+		size.x += 16;
+	}
+	return size;
 }
 
 void DisplayServerWindows::window_set_mouse_passthrough(const Vector<Vector2> &p_region, WindowID p_window) {
@@ -4385,6 +4435,7 @@ bool DisplayServerWindows::winink_available = false;
 GetPointerTypePtr DisplayServerWindows::win8p_GetPointerType = nullptr;
 GetPointerPenInfoPtr DisplayServerWindows::win8p_GetPointerPenInfo = nullptr;
 LogicalToPhysicalPointForPerMonitorDPIPtr DisplayServerWindows::win81p_LogicalToPhysicalPointForPerMonitorDPI = nullptr;
+PhysicalToLogicalPointForPerMonitorDPIPtr DisplayServerWindows::win81p_PhysicalToLogicalPointForPerMonitorDPI = nullptr;
 
 typedef enum _SHC_PROCESS_DPI_AWARENESS {
 	SHC_PROCESS_DPI_UNAWARE = 0,
@@ -4522,6 +4573,7 @@ DisplayServerWindows::DisplayServerWindows(const String &p_rendering_driver, Win
 		win8p_GetPointerType = (GetPointerTypePtr)GetProcAddress(user32_lib, "GetPointerType");
 		win8p_GetPointerPenInfo = (GetPointerPenInfoPtr)GetProcAddress(user32_lib, "GetPointerPenInfo");
 		win81p_LogicalToPhysicalPointForPerMonitorDPI = (LogicalToPhysicalPointForPerMonitorDPIPtr)GetProcAddress(user32_lib, "LogicalToPhysicalPointForPerMonitorDPI");
+		win81p_PhysicalToLogicalPointForPerMonitorDPI = (PhysicalToLogicalPointForPerMonitorDPIPtr)GetProcAddress(user32_lib, "PhysicalToLogicalPointForPerMonitorDPI");
 
 		winink_available = win8p_GetPointerType && win8p_GetPointerPenInfo;
 	}
@@ -4579,9 +4631,22 @@ DisplayServerWindows::DisplayServerWindows(const String &p_rendering_driver, Win
 	// Init context and rendering device
 #if defined(GLES3_ENABLED)
 
-	if (rendering_driver == "opengl3") {
-		int gl_version = detect_wgl_version();
-		if (gl_version < 30003) {
+	bool fallback = GLOBAL_GET("rendering/gl_compatibility/fallback_to_angle");
+	if (fallback && (rendering_driver == "opengl3")) {
+		Dictionary gl_info = detect_wgl();
+
+		bool force_angle = false;
+
+		Array device_list = GLOBAL_GET("rendering/gl_compatibility/force_angle_on_devices");
+		for (int i = 0; i < device_list.size(); i++) {
+			const Dictionary &device = device_list[i];
+			if (device.has("vendor") && device.has("name") && device["vendor"].operator String().to_upper() == gl_info["vendor"].operator String().to_upper() && (device["name"] == "*" || device["name"].operator String().to_upper() == gl_info["name"].operator String().to_upper())) {
+				force_angle = true;
+				break;
+			}
+		}
+
+		if (force_angle || (gl_info["version"].operator int() < 30003)) {
 			WARN_PRINT("Your video card drivers seem not to support the required OpenGL 3.3 version, switching to ANGLE.");
 			rendering_driver = "opengl3_angle";
 		}

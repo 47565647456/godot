@@ -18,7 +18,7 @@ jobs:
 
       - name: Install APT dependencies
         run: |
-            sudo apt-get install dos2unix libxml2-utils moreutils
+            sudo apt-get install -y dos2unix libxml2-utils moreutils
 
       - name: Install Python dependencies and general setup
         run: |

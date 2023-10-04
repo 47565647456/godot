@@ -13,7 +13,7 @@ jobs:
     name: 📊 Static checks
     uses: ./.github/workflows/static_checks_self_hosted.yml
 
-  # Second stage: Run all the builds and some of the tests.
+  # Second stage: Run all the builds and some of the tests. 
 
   # android-build:
   #   if: ${{ vars.DISABLE_GODOT_CI == '' }}

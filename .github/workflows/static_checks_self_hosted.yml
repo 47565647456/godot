@@ -27,7 +27,6 @@ jobs:
           sudo apt update
           sudo apt install -y clang-format
         
-
       - name: Install Python dependencies and general setup
         uses: actions/setup-python@v4
         with:

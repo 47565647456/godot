@@ -20,6 +20,14 @@ jobs:
         run: |
             sudo apt-get install -y dos2unix libxml2-utils moreutils
 
+      - name: Install clang-format
+        run: |
+          deb http://apt.llvm.org/focal/ llvm-toolchain-focal-15 main
+          deb-src http://apt.llvm.org/focal/ llvm-toolchain-focal-15 main
+          sudo apt update
+          sudo apt install -y clang-format
+        
+
       - name: Install Python dependencies and general setup
         uses: actions/setup-python@v4
         with:

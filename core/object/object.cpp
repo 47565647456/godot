@@ -666,8 +666,16 @@ bool Object::has_method(const StringName &p_method) const {
 	}
 
 	MethodBind *method = ClassDB::get_method(get_class_name(), p_method);
+	if (method != nullptr) {
+		return true;
+	}
 
-	return method != nullptr;
+	const Script *scr = Object::cast_to<Script>(this);
+	if (scr != nullptr) {
+		return scr->has_static_method(p_method);
+	}
+
+	return false;
 }
 
 Variant Object::getvar(const Variant &p_key, bool *r_valid) const {
@@ -1863,7 +1871,6 @@ bool Object::has_instance_binding(void *p_token) {
 	return found;
 }
 
-#ifdef TOOLS_ENABLED
 void Object::free_instance_binding(void *p_token) {
 	bool found = false;
 	_instance_binding_mutex.lock();
@@ -1888,6 +1895,7 @@ void Object::free_instance_binding(void *p_token) {
 	_instance_binding_mutex.unlock();
 }
 
+#ifdef TOOLS_ENABLED
 void Object::clear_internal_extension() {
 	ERR_FAIL_NULL(_extension);
 

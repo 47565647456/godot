@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  freedesktop_portal_desktop.h                                          */
+/*  gl_manager_x11_egl.h                                                  */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -28,62 +28,34 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#ifndef FREEDESKTOP_PORTAL_DESKTOP_H
-#define FREEDESKTOP_PORTAL_DESKTOP_H
+#ifndef GL_MANAGER_X11_EGL_H
+#define GL_MANAGER_X11_EGL_H
 
-#ifdef DBUS_ENABLED
+#if defined(X11_ENABLED) && defined(GLES3_ENABLED)
 
-#include "core/os/thread.h"
+#include "core/error/error_list.h"
+#include "core/os/os.h"
+#include "core/templates/local_vector.h"
+#include "drivers/egl/egl_manager.h"
 #include "servers/display_server.h"
 
-struct DBusMessage;
-struct DBusConnection;
-struct DBusMessageIter;
+#include <X11/Xlib.h>
 
-class FreeDesktopPortalDesktop {
+class GLManagerEGL_X11 : public EGLManager {
 private:
-	bool unsupported = false;
-
-	static bool try_parse_variant(DBusMessage *p_reply_message, int p_type, void *r_value);
-	// Read a setting from org.freekdesktop.portal.Settings
-	bool read_setting(const char *p_namespace, const char *p_key, int p_type, void *r_value);
-
-	static void append_dbus_string(DBusMessageIter *p_iter, const String &p_string);
-	static void append_dbus_dict_filters(DBusMessageIter *p_iter, const Vector<String> &p_filter_names, const Vector<String> &p_filter_exts);
-	static void append_dbus_dict_string(DBusMessageIter *p_iter, const String &p_key, const String &p_value, bool p_as_byte_array = false);
-	static void append_dbus_dict_bool(DBusMessageIter *p_iter, const String &p_key, bool p_value);
-	static bool file_chooser_parse_response(DBusMessageIter *p_iter, const Vector<String> &p_names, bool &r_cancel, Vector<String> &r_urls, int &r_index);
-
-	struct FileDialogData {
-		Vector<String> filter_names;
-		DBusConnection *connection = nullptr;
-		DisplayServer::WindowID prev_focus = DisplayServer::INVALID_WINDOW_ID;
-		Callable callback;
-		String path;
-	};
-
-	Mutex file_dialog_mutex;
-	Vector<FileDialogData> file_dialogs;
-	Thread file_dialog_thread;
-	SafeFlag file_dialog_thread_abort;
-
-	static void _thread_file_dialog_monitor(void *p_ud);
+	virtual const char *_get_platform_extension_name() const override;
+	virtual EGLenum _get_platform_extension_enum() const override;
+	virtual EGLenum _get_platform_api_enum() const override;
+	virtual Vector<EGLAttrib> _get_platform_display_attributes() const override;
+	virtual Vector<EGLint> _get_platform_context_attribs() const override;
 
 public:
-	FreeDesktopPortalDesktop();
-	~FreeDesktopPortalDesktop();
+	void window_resize(DisplayServer::WindowID p_window_id, int p_width, int p_height) {}
 
-	bool is_supported() { return !unsupported; }
-
-	Error file_dialog_show(DisplayServer::WindowID p_window_id, const String &p_xid, const String &p_title, const String &p_current_directory, const String &p_filename, DisplayServer::FileDialogMode p_mode, const Vector<String> &p_filters, const Callable &p_callback);
-
-	// Retrieve the system's preferred color scheme.
-	// 0: No preference or unknown.
-	// 1: Prefer dark appearance.
-	// 2: Prefer light appearance.
-	uint32_t get_appearance_color_scheme();
+	GLManagerEGL_X11(){};
+	~GLManagerEGL_X11(){};
 };
 
-#endif // DBUS_ENABLED
+#endif // X11_ENABLED && GLES3_ENABLED
 
-#endif // FREEDESKTOP_PORTAL_DESKTOP_H
+#endif // GL_MANAGER_X11_EGL_H
